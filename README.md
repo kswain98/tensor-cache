@@ -27,15 +27,15 @@ pip install -r requirements.txt
 
 ## Quick start
 
-Train a tiny model on Shakespeare to see everything end to end:
+Train a tiny model on Shakespeare to see everything end to end (~1–2 min on a single GPU):
 
 ```
 $ python data/shakespeare/prepare.py
-$ python tensor_cache/train.py --dataset=shakespeare --kv_mode=tc --kv_window=128 --tc_write_on_evict=True
-$ python tensor_cache/sample.py --out_dir=out --kv_mode=tc --kv_window=128
+$ python tensor_cache/train.py config/train_shakespeare.py
+$ python tensor_cache/sample.py --out_dir=out-shakespeare --kv_mode=tc --kv_window=128
 ```
 
-That's the whole loop: prepare data, train, sample. The same scripts run the four baselines below — only the `kv_mode` flag changes.
+That's the whole loop: prepare data, train, sample. The same scripts run the four baselines below — only the `kv_mode` flag changes. The OpenWebText defaults baked into `tensor_cache/train.py` are far too heavy for Shakespeare; `config/train_shakespeare.py` overrides them with a 5M-param model, 2000 iters, no `torch.compile`. Override any field on the command line: `python tensor_cache/train.py config/train_shakespeare.py --kv_mode=window_kv`.
 
 ## Comparison
 
@@ -49,15 +49,17 @@ Five `kv_mode` flags share the same model code, same hyperparameters, different 
 | `infini`        | Sliding window + Infini-attention compressive memory | O(W + H·D²) |
 | `tc`            | **Sliding window + tensor cache (this work)**        | O(W + H·D²) |
 
-Train each on OpenWebText:
+Each dataset has a config file in `config/` with sensible defaults. Train each baseline by overriding `--kv_mode` (and `--kv_window` for `full_kv`):
 
 ```
-$ python tensor_cache/train.py --dataset=openwebtext --out_dir=out_full_kv       --kv_mode=full_kv       --kv_window=0
-$ python tensor_cache/train.py --dataset=openwebtext --out_dir=out_window_kv     --kv_mode=window_kv     --kv_window=512
-$ python tensor_cache/train.py --dataset=openwebtext --out_dir=out_streaming_llm --kv_mode=streaming_llm --kv_window=512
-$ python tensor_cache/train.py --dataset=openwebtext --out_dir=out_infini        --kv_mode=infini        --kv_window=512
-$ python tensor_cache/train.py --dataset=openwebtext --out_dir=out_tc            --kv_mode=tc            --kv_window=512
+$ python tensor_cache/train.py config/train_openwebtext.py --kv_mode=full_kv       --kv_window=0   --out_dir=out_full_kv
+$ python tensor_cache/train.py config/train_openwebtext.py --kv_mode=window_kv     --kv_window=512 --out_dir=out_window_kv
+$ python tensor_cache/train.py config/train_openwebtext.py --kv_mode=streaming_llm --kv_window=512 --out_dir=out_streaming_llm
+$ python tensor_cache/train.py config/train_openwebtext.py --kv_mode=infini        --kv_window=512 --out_dir=out_infini
+$ python tensor_cache/train.py config/train_openwebtext.py --kv_mode=tc            --kv_window=512 --out_dir=out_tc
 ```
+
+Swap `train_openwebtext.py` for `train_wikitext2.py` (mid-scale, ~16M params, ~10–20 min) or `train_shakespeare.py` (toy, 5M params, ~1 min) to use the same recipe on a smaller dataset.
 
 For multi-GPU training, prepend `torchrun --standalone --nproc_per_node=<N>`.
 
