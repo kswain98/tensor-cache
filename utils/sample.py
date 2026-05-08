@@ -2,13 +2,20 @@
 Sample from a trained model
 """
 import os
+import sys
 import pickle
 import time
 from contextlib import nullcontext
+from pathlib import Path
+
+# Make project root importable so `tensor_cache.*`, `utils.*`, `baselines.*` resolve
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import torch
 import tiktoken
 import torch.nn.functional as F
-from model import GPTConfig, GPT
+
+from tensor_cache.model import GPTConfig, GPT
 from utils import apply_overrides
 
 

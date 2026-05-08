@@ -9,7 +9,7 @@
 #   python tensor_cache/train.py config/train_wikitext2.py --kv_mode=window_kv
 
 # I/O
-out_dir = 'out-wikitext2'
+out_dir = 'checkpoints/wikitext2'
 eval_interval = 500
 eval_iters = 50
 log_interval = 50

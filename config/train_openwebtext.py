@@ -15,7 +15,7 @@
 #       --kv_mode=window_kv --kv_window=512
 
 # I/O
-out_dir = 'out-openwebtext'
+out_dir = 'checkpoints/openwebtext'
 eval_interval = 2000
 eval_iters = 200
 log_interval = 1

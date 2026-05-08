@@ -8,7 +8,7 @@
 #   python tensor_cache/train.py config/train_shakespeare.py --kv_mode=window_kv
 
 # I/O
-out_dir = 'out-shakespeare'
+out_dir = 'checkpoints/shakespeare'
 eval_interval = 200
 eval_iters = 20
 log_interval = 10

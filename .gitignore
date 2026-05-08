@@ -221,4 +221,5 @@ wandb/
 # Custom
 **/*.bin
 **/ckpt.pt
+checkpoints/
 .claude

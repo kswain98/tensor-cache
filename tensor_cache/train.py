@@ -17,17 +17,22 @@ $ torchrun --nproc_per_node=8 --nnodes=2 --node_rank=1 --master_addr=123.456.123
 """
 
 import os
+import sys
 import time
 import math
 import pickle
 from contextlib import nullcontext
+from pathlib import Path
+
+# Make project root importable so `tensor_cache.*`, `utils.*`, `baselines.*` resolve
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import torch
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.distributed import init_process_group, destroy_process_group
 
-from model import GPTConfig, GPT
+from tensor_cache.model import GPTConfig, GPT
 from utils import make_progress, cprint, ctprint, apply_overrides
 
 # -----------------------------------------------------------------------------
@@ -409,6 +414,12 @@ if ddp:
 def estimate_loss():
     out = {}
     model.eval()
+    eval_pbar = make_progress(
+        total=2 * int(eval_iters),
+        desc=f"eval@{iter_num}",
+        position_offset=1,  # sit one line below the train bar instead of fighting for it
+        leave=False,
+    )
     for split in ['train', 'val']:
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
@@ -417,7 +428,10 @@ def estimate_loss():
             with ctx:
                 logits, loss = model(X, Y)
             losses[k] = loss.item()
+            eval_pbar.update(1)
+            eval_pbar.set_postfix(split=split, loss=f"{losses[:k+1].mean().item():.4f}")
         out[split] = losses.mean()
+    eval_pbar.close()
     model.train()
     return out
 
@@ -503,6 +517,7 @@ if wandb_log and master_process:
             wandb.run.summary[f"params/{k}"] = v
 
 train_pbar = None
+postfix_state = {}
 if master_process:
     train_total = int(max_iters) + 1
     train_pbar = make_progress(
@@ -511,6 +526,10 @@ if master_process:
         desc="train",
         leave=True,
     )
+
+def _refresh_train_pbar():
+    if train_pbar is not None and not getattr(train_pbar, "disable", False):
+        train_pbar.set_postfix(**postfix_state)
 
 while True:
 
@@ -523,7 +542,9 @@ while True:
     should_eval = (iter_num % eval_interval == 0) and (iter_num > 0 or eval_at_start)
     if should_eval and master_process:
         losses = estimate_loss()
-        ctprint(f"step {iter_num}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        postfix_state["val"] = f"{losses['val']:.4f}"
+        postfix_state["best"] = f"{best_val_loss:.4f}"
+        _refresh_train_pbar()
         if wandb_log:
             wandb.log({
                 "iter": iter_num,
@@ -534,6 +555,7 @@ while True:
         if losses['val'] < best_val_loss or always_save_checkpoint:
             if losses['val'] < best_val_loss:
                 best_val_loss = losses['val']
+                postfix_state["best"] = f"{best_val_loss:.4f}"
             if iter_num > 0:
                 checkpoint = {
                     'model': raw_model.state_dict(),
@@ -543,8 +565,9 @@ while True:
                     'best_val_loss': best_val_loss,
                     'config': config,
                 }
-                ctprint(f"saving checkpoint to {out_dir}")
                 torch.save(checkpoint, os.path.join(out_dir, 'ckpt.pt'))
+                postfix_state["ckpt"] = str(iter_num)
+                _refresh_train_pbar()
     if iter_num == 0 and eval_only:
         break
 
@@ -611,13 +634,14 @@ while True:
         # scale up to undo the division above, approximating the true total loss (exact would have been a sum)
         lossf = loss.item() * gradient_accumulation_steps
         toks_per_s = tokens_per_iter / max(dt, 1e-12)
+        postfix_state.update({
+            "loss": f"{lossf:.4f}",
+            "lr": f"{lr:.2e}",
+            "tok_s": f"{toks_per_s:.0f}",
+            "ms": f"{dt*1000:.0f}",
+        })
         if train_pbar is not None and not getattr(train_pbar, "disable", False):
-            train_pbar.set_postfix(
-                loss=f"{lossf:.4f}",
-                lr=f"{lr:.2e}",
-                tok_s=f"{toks_per_s:.0f}",
-                ms=f"{dt*1000:.0f}",
-            )
+            train_pbar.set_postfix(**postfix_state)
         else:
             ctprint(f"iter {iter_num}: loss {lossf:.4f}, time {dt*1000:.2f}ms")
         if wandb_log and wandb_log_train:

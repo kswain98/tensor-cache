@@ -9,16 +9,21 @@ Evaluates a contiguous token stream and reports:
 
 import math
 import os
+import sys
 import pickle
 import time
 from contextlib import nullcontext
+from pathlib import Path
+
+# Make project root importable so `tensor_cache.*`, `utils.*`, `baselines.*` resolve
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import tiktoken
 import torch
 import torch.nn.functional as F
 
-from model import GPTConfig, GPT
+from tensor_cache.model import GPTConfig, GPT
 from utils import make_progress, progress_enabled, cprint, apply_overrides
 
 # -----------------------------------------------------------------------------

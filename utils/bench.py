@@ -11,14 +11,19 @@ Benchmarks memory usage and throughput across inference modes:
 
 import csv
 import os
+import sys
 import time
 from contextlib import nullcontext
 from datetime import datetime, timezone
+from pathlib import Path
+
+# Make project root importable so `tensor_cache.*`, `utils.*`, `baselines.*` resolve
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import numpy as np
 import torch
 
-from model import GPT, GPTConfig
+from tensor_cache.model import GPT, GPTConfig
 from utils import make_progress, cprint, ctprint, apply_overrides
 
 # -----------------------------------------------------------------------------
