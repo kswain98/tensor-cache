@@ -13,7 +13,7 @@ The math and algorithm are in [`tensor_cache/tensor_cache.md`](tensor_cache/tens
 ## Results
 
 <p align="center">
-  <img src="assets/nll_context.png"        alt="NLL vs context length"        width="48%">
+  <img src="assets/nll_context.png" alt="NLL vs context length" width="48%">
   <img src="assets/throughput.png" alt="Throughput vs context length" width="48%">
 </p>
 
@@ -35,7 +35,7 @@ $ python tensor_cache/train.py config/train_shakespeare.py
 $ python utils/sample.py --out_dir=checkpoints/shakespeare --kv_mode=tc --kv_window=128
 ```
 
-That's the whole loop: prepare data, train, sample. The same scripts run the four baselines below — only the `kv_mode` flag changes. The OpenWebText defaults baked into `tensor_cache/train.py` are far too heavy for Shakespeare; `config/train_shakespeare.py` overrides them with a 5M-param model, 2000 iters, no `torch.compile`. Override any field on the command line: `python tensor_cache/train.py config/train_shakespeare.py --kv_mode=window_kv`.
+That's the whole loop: prepare data, train, sample. The same scripts run the four baselines below — only the `kv_mode` flag changes.
 
 ## Comparison
 
@@ -123,7 +123,6 @@ Every script declares its config variables at the top of the file, overridable v
 | `tc_two_timescales` | `False`     | enable fast+slow dual TC states                  |
 
 The full list lives at the top of `tensor_cache/train.py`.
-
 
 ## Citation
 

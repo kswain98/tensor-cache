@@ -262,11 +262,17 @@ def main():
 
     stream_tokens = np.asarray(data[start:start + int(eval_tokens) + 1], dtype=np.int64)
 
-    # Compute chars-per-token ratio for BPC
-    enc = tiktoken.get_encoding("gpt2")
-    decoded_text = enc.decode(stream_tokens.tolist())
-    chars_per_token = len(decoded_text) / len(stream_tokens) if len(stream_tokens) > 0 else 1.0
-    cprint(f"[info] chars_per_token={chars_per_token:.3f} (total_chars={len(decoded_text)}, total_tokens={len(stream_tokens)})")
+    # Compute chars-per-token ratio for BPC. Optional — tiktoken hits the network
+    # on first use to fetch the GPT-2 BPE vocab, so a DNS or VPN hiccup here
+    # would otherwise abort the entire eval. Fall back to NaN BPC if it fails.
+    try:
+        enc = tiktoken.get_encoding("gpt2")
+        decoded_text = enc.decode(stream_tokens.tolist())
+        chars_per_token = len(decoded_text) / len(stream_tokens) if len(stream_tokens) > 0 else 1.0
+        cprint(f"[info] chars_per_token={chars_per_token:.3f} (total_chars={len(decoded_text)}, total_tokens={len(stream_tokens)})")
+    except Exception as e:
+        cprint(f"[warn] tiktoken unavailable ({type(e).__name__}); skipping BPC, NLL/PPL still computed")
+        chars_per_token = float('nan')
 
     wb = None
     if wandb_log:
