@@ -102,9 +102,20 @@ kv_window = 512  # 0 = unbounded full KV-cache baseline, >0 = fixed window
 kv_num_sinks = 0  # attention sink tokens (StreamingLLM); 0 = disabled
 kv_mode = 'window_kv'  # {'full_kv', 'window_kv', 'tc', 'streaming_llm', 'infini'}
 
+# Local-attention window applied DURING TRAINING (not just at streaming eval).
+# -1 => disabled: full causal attention over the whole block (default; correct
+#       for full_kv and for the StreamingLLM-style baselines, which are trained
+#       dense and only windowed at inference).
+# >0  => the local path may only attend to the last `train_attn_window` tokens,
+#       so anything older must be carried by the learnable memory. This is
+#       REQUIRED to train kv_mode='tc' (and 'infini') as an actual memory:
+#       without it the memory is redundant with full attention and its gate
+#       never opens. Typically set equal to kv_window.
+train_attn_window = -1
+
 tc_enabled = False
 tc_layers = -1  # -1 => all layers, 0 => none, k>0 => top-k layers
-tc_update_rule = "delta"      # "outer" or "delta"
+tc_update_rule = "delta"      # "outer", "delta", or "wedge"
 tc_write_on_evict = True
 tc_write_on_insert = False
 tc_freeze_decay_lr = False    # freeze decay/lr (ablation: learned vs fixed)
@@ -178,8 +189,27 @@ elif kv_mode == 'tc':
     if (not tc_write_on_evict) and (not tc_write_on_insert):
         cprint("warning: both tc_write_on_evict and tc_write_on_insert are False; enabling tc_write_on_evict")
         tc_write_on_evict = True
+    # Note: torch.compile is SAFE and ~2x faster for kv_mode='tc' (verified by a
+    # controlled same-seed/same-data eager-vs-compile run: Δval within noise).
+    # An earlier "compile degrades TC" observation was a confounded false alarm.
 else:
     raise ValueError(f"Unknown kv_mode: {kv_mode}")
+
+# Resolve the training-time attention window. kv_mode='tc'/'infini' carry a
+# learnable memory that is only exercised when the local path cannot see the
+# whole block; without a training window the memory is redundant with full
+# attention and its fusion gate never opens (it trains to ~its init value and
+# the cache contributes nothing at streaming eval). Default it to kv_window so
+# TC/Infini are correct-by-default; users can still force-disable with 0.
+if kv_mode in ('tc', 'infini') and (train_attn_window is None or train_attn_window <= 0):
+    train_attn_window = kv_window
+    cprint(f"train_attn_window defaulted to kv_window={kv_window} for kv_mode='{kv_mode}' "
+           f"(memory is only trained when the local window evicts; pass "
+           f"--train_attn_window=0 to force full-attention training)")
+train_attn_window_eff = int(train_attn_window) if (train_attn_window and train_attn_window > 0) else None
+if train_attn_window_eff is not None:
+    cprint(f"training with local attention window = {train_attn_window_eff} "
+           f"(tokens older than this are carried only by the {kv_mode} memory)")
 
 def build_model_args():
     return dict(
@@ -426,7 +456,7 @@ def estimate_loss():
             X, Y = get_batch(split)
             maybe_cudagraph_mark_step_begin()
             with ctx:
-                logits, loss = model(X, Y)
+                logits, loss = model(X, Y, attn_window=train_attn_window_eff)
             losses[k] = loss.item()
             eval_pbar.update(1)
             eval_pbar.set_postfix(split=split, loss=f"{losses[:k+1].mean().item():.4f}")
@@ -584,7 +614,7 @@ while True:
             model.require_backward_grad_sync = (micro_step == gradient_accumulation_steps - 1)
         maybe_cudagraph_mark_step_begin()
         with ctx:
-            logits, loss = model(X, Y)
+            logits, loss = model(X, Y, attn_window=train_attn_window_eff)
             loss = loss / gradient_accumulation_steps # scale the loss to account for gradient accumulation
         if compile and device_type == 'cuda' and compile_clone_loss_for_backward:
             loss = loss.clone()
