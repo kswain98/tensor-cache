@@ -127,14 +127,14 @@ The full list lives at the top of `tensor_cache/train.py`.
 ## Citation
 
 ```bibtex
-@misc{swain2026tensorcache,
-      title={Tensor Cache: Eviction-conditioned Associative Memory for Transformers},
+@misc{swain2026tensorcacheevictionconditionedassociative,
+      title={Tensor Cache: Eviction-conditioned Associative Memory for Transformers}, 
       author={Kabir Swain and Sijie Han and Daniel Karl I. Weidele and Mauro Martino and Antonio Torralba},
       year={2026},
-      eprint={XXXX.XXXXX},
+      eprint={2605.22884},
       archivePrefix={arXiv},
-      primaryClass={cs.AI},
-      url={https://arxiv.org/abs/XXXX.XXXXX},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2605.22884}, 
 }
 ```
 
